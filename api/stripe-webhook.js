@@ -5,13 +5,13 @@ import { createClient } from "@supabase/supabase-js";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 export const config = { api: { bodyParser: false } };
 
-// Supabase client (service role key)
+// Supabase service role client
 const supabase = createClient(
   process.env.PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Read raw body for Stripe signature verification
+// Helper to get raw request body
 async function getRawBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -34,48 +34,38 @@ export default async function handler(req, res) {
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-
-    const customerEmail = session.metadata.customer_email;
-    const totalAmount = Number(session.metadata.total_amount || 0);
-    let items = [];
+    const orderId = session.metadata.order_id;
 
     try {
-      items = JSON.parse(session.metadata.items || "[]");
-    } catch (err) {
-      console.error("Failed to parse items metadata:", err.message);
-    }
-
-    try {
-      // 1️⃣ Insert main order
-      const { data: orderData, error: orderError } = await supabase
+      // 1️⃣ Mark order as paid
+      const { error: orderError, data: orderData } = await supabase
         .from("Orders")
-        .insert({
-          customer_email: customerEmail,
-          order_status: "paid",
-          total_amount: totalAmount,
-        })
+        .update({ order_status: "paid" })
+        .eq("id", orderId)
         .select()
         .single();
 
       if (orderError) throw orderError;
-      console.log(`Order ${orderData.id} inserted`);
+      console.log(`Order ${orderId} marked as paid`);
 
-      // 2️⃣ Insert each cart item
+      // 2️⃣ Insert items into order_items
+      const items = JSON.parse(orderData.raw_items || "[]");
+
       for (const item of items) {
         const { error: itemError } = await supabase.from("order_items").insert({
-          order_id: orderData.id,
+          order_id: orderId,
           name: item.name,
           price: item.price,
           quantity: item.quantity,
           options: JSON.stringify(item.options || []),
           special_instructions: item.specialInstructions || "",
         });
-        if (itemError) console.error("Item insert error:", itemError.message);
+        if (itemError) console.error("Failed to insert item:", itemError.message);
       }
 
       console.log(`Inserted ${items.length} items into order_items`);
     } catch (err) {
-      console.error("Failed to insert order/items:", err.message);
+      console.error("Webhook processing error:", err.message);
     }
   }
 

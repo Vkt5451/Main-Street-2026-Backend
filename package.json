@@ -1,5 +1,8 @@
 {
+  "name": "main-street-2026-backend",
+  "version": "1.0.0",
+  "type": "module",
   "dependencies": {
-    "stripe": "^20.1.0"
+    "stripe": "^12.0.0"
   }
 }

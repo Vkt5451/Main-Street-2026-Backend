@@ -1,23 +1,8 @@
-// backend/api/db.js
-let orders = [];
+// db.js
+import { createClient } from '@supabase/supabase-js'
 
-export function createOrder(order) {
-  const id = `order_${Date.now()}`; // simple unique ID
-  const newOrder = { ...order, id, status: "pending" };
-  orders.push(newOrder);
-  return newOrder;
-}
+// Server-side Supabase client
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-export function updateOrderStatus(orderId, status) {
-  const order = orders.find(o => o.id === orderId);
-  if (order) order.status = status;
-  return order;
-}
-
-export function getOrder(orderId) {
-  return orders.find(o => o.id === orderId);
-}
-
-export function getAllOrders() {
-  return orders;
-}
+export const supabase = createClient(supabaseUrl, supabaseServiceRoleKey)

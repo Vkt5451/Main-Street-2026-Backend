@@ -1,41 +1,49 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const Stripe = require('stripe');
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// server.js
+import express from 'express'
+import bodyParser from 'body-parser'
+import Stripe from 'stripe'
+import { supabase } from './db.js'
 
-const app = express();
+const app = express()
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET
 
-// Stripe requires the raw body to validate the webhook signature
+// Stripe requires raw body to validate webhook
 app.use(
   '/webhook',
   bodyParser.raw({ type: 'application/json' })
-);
+)
 
-// Minimal webhook endpoint
-app.post('/webhook', (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  const endpointSecret = 'YOUR_WEBHOOK_SECRET'; // From Stripe dashboard
+app.post('/webhook', async (req, res) => {
+  const sig = req.headers['stripe-signature']
 
-  let event;
-
+  let event
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret)
   } catch (err) {
-    console.log('⚠️ Webhook signature verification failed.', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    console.log('⚠️ Webhook signature verification failed.', err.message)
+    return res.status(400).send(`Webhook Error: ${err.message}`)
   }
 
   // Only handle successful payments
   if (event.type === 'payment_intent.succeeded') {
-    const paymentIntent = event.data.object;
-    console.log(`✅ Payment of ${paymentIntent.amount} succeeded for order ID: ${paymentIntent.metadata.order_id}`);
-    
-    // TODO: Update your order in your database as "Paid"
-    // Example: updateOrderStatus(paymentIntent.metadata.order_id, 'Paid');
+    const paymentIntent = event.data.object
+    const orderId = paymentIntent.metadata.order_id
+
+    console.log(`✅ Payment of ${paymentIntent.amount} succeeded for order ID: ${orderId}`)
+
+    // Update order in Supabase
+    const { error } = await supabase
+      .from('orders')
+      .update({ order_status: 'Paid' })
+      .eq('id', orderId)
+
+    if (error) console.error('Failed to update order in Supabase', error)
   }
 
-  // Always respond with 2xx to acknowledge receipt
-  res.json({ received: true });
-});
+  res.json({ received: true })
+})
 
-app.listen(3000, () => console.log('Server running on port 3000'));
+const PORT = process.env.PORT || 3000
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`))
+okay

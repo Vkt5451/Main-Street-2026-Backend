@@ -41,27 +41,25 @@ export default async function handler(req, res) {
     // ----------------------------
     // Create Stripe checkout session
     // ----------------------------
-const session = await stripe.checkout.sessions.create({
-    payment_method_types: ["card"],
-    line_items: items.map(item => ({
-      price_data: {
-        currency: "usd",
-        product_data: { name: item.name },
-        unit_amount: Math.round(item.price * 100), // dollars → cents
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: items.map(item => ({
+        price_data: {
+          currency: "usd",
+          product_data: { name: item.name },
+          unit_amount: Math.round(parseFloat(item.price.replace("$","")) * 100),
+        },
+        quantity: item.quantity,
+      })),
+      mode: "payment",
+      metadata: {
+        items: JSON.stringify(items),       // send cart for webhook
+        customer_email: customer_email,     // optional
+        total_amount: total_amount,         // optional
       },
-      quantity: item.quantity,
-    })),
-    mode: "payment",
-    metadata: {
-      order_id: orderId,
-      customer_email: req.body.customer_email,  // send this too
-      total_amount: items.reduce((sum, i) => sum + i.price * i.quantity, 0),
-      items: JSON.stringify(items),              // **important**
-    },
-    success_url: "https://vkt5451.github.io/Main-Street-2026/",
-    cancel_url: "https://vkt5451.github.io/Main-Street-2026/menu-page.html",
-  });
-
+      success_url: "https://vkt5451.github.io/Main-Street-2026/",
+      cancel_url: "https://vkt5451.github.io/Main-Street-2026/menu-page.html",
+    });
 
     // ----------------------------
     // Send session URL back to frontend
@@ -72,3 +70,4 @@ const session = await stripe.checkout.sessions.create({
     res.status(500).json({ error: err.message || "Stripe checkout failed" });
   }
 }
+

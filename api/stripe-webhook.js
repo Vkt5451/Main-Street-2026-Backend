@@ -34,51 +34,62 @@ export default async function handler(req, res) {
     console.error("Webhook signature verification failed:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
+if (event.type === "checkout.session.completed") {
+  const session = event.data.object;
 
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object;
+  // Parse cart items from metadata
+  let items = [];
+  try {
+    items = JSON.parse(session.metadata.items);
+  } catch (err) {
+    console.error("Failed to parse items metadata:", err.message);
+  }
 
-    const customerEmail = session.metadata.customer_email;
-    const totalAmount = Number(session.metadata.total_amount);
-    let items = [];
-    try {
-      items = JSON.parse(session.metadata.items);
-    } catch (err) {
-      console.error("Failed to parse items metadata:", err.message);
+  const customerEmail = session.metadata.customer_email || "unknown@example.com";
+  const totalAmount = Number(session.metadata.total_amount) || 0;
+
+  try {
+    // 1️⃣ Insert main order (Supabase generates UUID automatically)
+    const { data: orderData, error: orderError } = await supabase
+      .from("Orders")
+      .insert({
+        customer_email: customerEmail,
+        order_status: "paid",
+        total_amount: totalAmount,
+      })
+      .select() // return inserted row
+      .single();
+
+    if (orderError) {
+      console.error("Failed to insert order:", orderError);
+      return;
     }
 
-    try {
-      // 1️⃣ Insert main order
-      const { data: orderData, error: orderError } = await supabase
-        .from("Orders")
+    console.log(`Order ${orderData.id} inserted into Orders`);
+
+    // 2️⃣ Insert individual items
+    for (const item of items) {
+      const { data: itemData, error: itemError } = await supabase
+        .from("order_items")
         .insert({
-          customer_email: customerEmail,
-          order_status: "paid",
-          total_amount: totalAmount,
-        })
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
-      console.log(`Order ${orderData.id} inserted into Orders`);
-
-      // 2️⃣ Insert each cart item
-      for (const item of items) {
-        await supabase.from("order_items").insert({
-          order_id: orderData.id,
+          order_id: orderData.id, // MUST match Orders.id (UUID)
           name: item.name,
           price: item.price,
           quantity: item.quantity,
           options: JSON.stringify(item.options || []),
           special_instructions: item.specialInstructions || "",
         });
-      }
 
-      console.log(`Inserted ${items.length} items into order_items`);
-    } catch (err) {
-      console.error("Failed to insert order/items:", err.message);
+      if (itemError) console.error("Failed to insert item:", item, itemError);
+      else console.log("Inserted item:", itemData);
     }
+
+    console.log(`Inserted ${items.length} items into order_items`);
+  } catch (err) {
+    console.error("Webhook insertion error:", err.message);
   }
+}
+
 
   res.status(200).json({ received: true });
 }

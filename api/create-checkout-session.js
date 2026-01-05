@@ -25,12 +25,16 @@ export default async function handler(req, res) {
 
   try {
     // Sanitize prices
-    const sanitizedItems = items.map(item => ({
-      ...item,
-      price: typeof item.price === "string" ? parseFloat(item.price.replace("$", "")) : item.price
-    }));
+    const sanitizedItems = items.map(item => {
+      let price = parseFloat(item.price?.toString().replace("$",""));
+      if (isNaN(price)) throw new Error(`Invalid price for item: ${item.name}`);
+      return { ...item, price };
+    });
+
 
     const orderTotal = sanitizedItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+    console.log("Creating Stripe session with items:", sanitizedItems);
+    console.log("Order total:", orderTotal);
 
     // 1️⃣ Insert order immediately with status "pending"
     const { data: orderData, error: orderError } = await supabase

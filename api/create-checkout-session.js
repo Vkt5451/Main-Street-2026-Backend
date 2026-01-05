@@ -46,7 +46,7 @@ export default async function handler(req, res) {
         price_data: {
           currency: "usd",
           product_data: { name: item.name },
-          unit_amount: Math.round(item.price * 100), // dollars → cents
+          unit_amount: Math.round(parseFloat(item.price.replace("$","")) * 100),
         },
         quantity: item.quantity,
       })),

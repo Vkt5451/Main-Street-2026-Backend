@@ -63,7 +63,7 @@ export default async function handler(req, res) {
       metadata: { order_id: orderId }, // only send order_id to Stripe
       success_url: "https://vkt5451.github.io/Main-Street-2026/",
       cancel_url: "https://vkt5451.github.io/Main-Street-2026/menu-page.html",
-    }));
+    });
 
     res.status(200).json({ url: session.url, orderId });
   } catch (err) {

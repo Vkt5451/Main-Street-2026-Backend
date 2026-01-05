@@ -1,3 +1,4 @@
+//WORKING CODE 11:11PM 01/04/2026
 // backend/api/create-checkout-session.js
 import Stripe from "stripe";
 

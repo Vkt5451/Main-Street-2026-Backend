@@ -8,13 +8,12 @@ export const config = {
   api: { bodyParser: false }, // Stripe requires raw body
 };
 
-// Initialize Supabase client
+// Supabase client (service role key)
 const supabase = createClient(
-  process.env.PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY // must be service role key for insert
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Helper: read raw request body
 async function getRawBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -30,11 +29,7 @@ export default async function handler(req, res) {
   let event;
 
   try {
-    event = stripe.webhooks.constructEvent(
-      buf,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
+    event = stripe.webhooks.constructEvent(buf, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error("Webhook signature verification failed:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -52,24 +47,37 @@ export default async function handler(req, res) {
       console.error("Failed to parse items metadata:", err.message);
     }
 
-    // Insert order into Supabase
-    const { data, error } = await supabase
-      .from("Orders")
-      .insert({
-        customer_email: customerEmail,
-        order_status: "paid",
-        total_amount: totalAmount,
-      })
-      .select()
-      .single();
+    try {
+      // 1️⃣ Insert main order
+      const { data: orderData, error: orderError } = await supabase
+        .from("Orders")
+        .insert({
+          customer_email: customerEmail,
+          order_status: "paid",
+          total_amount: totalAmount,
+        })
+        .select()
+        .single();
 
-    if (error) {
-      console.error("Failed to insert order into Supabase:", error.message);
-    } else {
-      console.log(`Order ${data.id} inserted into Supabase!`);
+      if (orderError) throw orderError;
+      console.log(`Order ${orderData.id} inserted into Orders`);
+
+      // 2️⃣ Insert each cart item
+      for (const item of items) {
+        await supabase.from("order_items").insert({
+          order_id: orderData.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          options: JSON.stringify(item.options || []),
+          special_instructions: item.specialInstructions || "",
+        });
+      }
+
+      console.log(`Inserted ${items.length} items into order_items`);
+    } catch (err) {
+      console.error("Failed to insert order/items:", err.message);
     }
-
-    // Optional: insert order items if you add an order_items table later
   }
 
   res.status(200).json({ received: true });

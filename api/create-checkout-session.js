@@ -4,7 +4,11 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
-  const { items } = req.body; // array of cart items from frontend
+  const { items } = req.body;
+
+  if (!items || !Array.isArray(items)) {
+    return res.status(400).json({ error: "No items provided" });
+  }
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -13,7 +17,7 @@ export default async function handler(req, res) {
         price_data: {
           currency: "usd",
           product_data: { name: item.name },
-          unit_amount: item.price * 100, // Stripe uses cents
+          unit_amount: Math.round(parseFloat(item.price.replace("$","")) * 100),
         },
         quantity: item.quantity,
       })),
@@ -25,7 +29,9 @@ export default async function handler(req, res) {
     res.status(200).json({ url: session.url });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Stripe checkout failed" });
+    res.status(500).json({ error: err.message || "Stripe checkout failed" });
   }
 }
 
+
+      

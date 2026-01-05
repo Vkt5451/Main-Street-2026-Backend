@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export const config = {
-  api: { bodyParser: false }, // Stripe requires raw body
+  api: { bodyParser: false }
 };
 
 // Supabase client (service role key)
@@ -14,6 +14,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// Helper to read raw body
 async function getRawBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
@@ -21,8 +22,7 @@ async function getRawBody(req) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "POST")
-    return res.status(405).json({ error: "Method not allowed" });
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const buf = await getRawBody(req);
   const sig = req.headers["stripe-signature"];
@@ -38,31 +38,30 @@ export default async function handler(req, res) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
 
-    const customerEmail = session.metadata.customer_email;
-    const totalAmount = Number(session.metadata.total_amount);
     let items = [];
     try {
       items = JSON.parse(session.metadata.items);
+      console.log("Parsed items:", items);
     } catch (err) {
       console.error("Failed to parse items metadata:", err.message);
     }
 
     try {
-      // 1️⃣ Insert main order
+      // Insert main order
       const { data: orderData, error: orderError } = await supabase
         .from("Orders")
         .insert({
-          customer_email: customerEmail,
+          customer_email: session.metadata.customer_email || "",
           order_status: "paid",
-          total_amount: totalAmount,
+          total_amount: Number(session.metadata.total_amount)
         })
         .select()
         .single();
 
       if (orderError) throw orderError;
-      console.log(`Order ${orderData.id} inserted into Orders`);
+      console.log(`Order ${orderData.id} inserted`);
 
-      // 2️⃣ Insert each cart item
+      // Insert individual items
       for (const item of items) {
         await supabase.from("order_items").insert({
           order_id: orderData.id,
@@ -70,7 +69,7 @@ export default async function handler(req, res) {
           price: item.price,
           quantity: item.quantity,
           options: JSON.stringify(item.options || []),
-          special_instructions: item.specialInstructions || "",
+          special_instructions: item.specialInstructions || ""
         });
       }
 

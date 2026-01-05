@@ -30,13 +30,17 @@ export default async function handler(req, res) {
     }
 
     // Handle only successful payments
-    if (event.type === 'payment_intent.succeeded') {
-      const paymentIntent = event.data.object;
-      console.log(`✅ Payment succeeded for order: ${paymentIntent.metadata.order_id}`);
+        if (event.type === 'payment_intent.succeeded') {
+        // mark order as Paid
+        console.log(`✅ Payment succeeded for order: ${paymentIntent.metadata.order_id}`);
+        }
 
-      // TODO: Update your database to mark this order as Paid
-      // Example: await markOrderPaid(paymentIntent.metadata.order_id)
-    }
+        if (event.type === 'payment_intent.payment_failed') {
+        const paymentIntent = event.data.object;
+        console.log(`❌ Payment failed for order: ${paymentIntent.metadata.order_id}`);
+        console.log(`Reason: ${paymentIntent.last_payment_error?.message}`);
+        // Optional: notify customer or flag order as unpaid
+        }
 
     res.status(200).json({ received: true });
   } else {
